@@ -5,12 +5,8 @@ const https = require('https');
 
 const PORT = process.env.PORT || 3000;
 
-function nowInTimezone(tz) {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-}
-
-function getPokemonId(seed, poolSize) {
-  return (seed * 2654435761 % 2**32) % poolSize + 1;
+function getRandomId(poolSize) {
+  return Math.floor(Math.random() * poolSize) + 1;
 }
 
 function fetchPokemonData(id, cb) {
@@ -32,13 +28,7 @@ function fetchPokemonData(id, cb) {
   });
 }
 
-function buildMarkup(pokemon, showRealImage, nextSeed, nextRevealState) {
-  const imgStyle = showRealImage
-    ? ''
-    : 'filter: brightness(0) saturate(100%);';
-
-  const toggleUrl = `/markup?seed=${nextSeed}&reveal=${nextRevealState}`;
-
+function buildMarkup(pokemon) {
   return `
     <html>
     <head>
@@ -52,17 +42,40 @@ function buildMarkup(pokemon, showRealImage, nextSeed, nextRevealState) {
           transform: translateY(-50%);
           text-align: center;
         }
-        img { width: 300px; ${imgStyle}; cursor: pointer; }
+        img { width: 300px; cursor: pointer; }
         h1 { font-size: 2em; margin-top: 20px; }
       </style>
     </head>
     <body>
       <div class="img-container">
-        <a href="${toggleUrl}">
-          <img src="${pokemon.imageUrl}" alt="Who's that Pokémon?" />
-        </a>
-        ${showRealImage ? `<h1>${pokemon.name}</h1>` : ''}
+        <img id="pokeImg" src="${pokemon.imageUrl}" />
+        <h1 id="pokeName" style="display:none">${pokemon.name}</h1>
       </div>
+      <script>
+        let reveal = false;
+        let currentId = ${pokemon.id};
+        const pokeImg = document.getElementById('pokeImg');
+        const pokeName = document.getElementById('pokeName');
+
+        function toggle() {
+          if (!reveal) {
+            pokeImg.style.filter = '';
+            pokeName.style.display = 'block';
+            reveal = true;
+          } else {
+            fetch('/random').then(r => r.json()).then(data => {
+              pokeImg.src = data.imageUrl;
+              pokeImg.style.filter = 'brightness(0) saturate(100%)';
+              pokeName.textContent = data.name;
+              pokeName.style.display = 'none';
+              reveal = false;
+            });
+          }
+        }
+
+        pokeImg.addEventListener('click', toggle);
+        pokeImg.style.filter = 'brightness(0) saturate(100%)';
+      </script>
     </body>
     </html>`;
 }
@@ -73,27 +86,23 @@ http.createServer((req, res) => {
   const settingsPath = path.join(__dirname, 'settings.json');
 
   let poolSize = 151;
-  let timezone = 'UTC';
   try {
     const settings = JSON.parse(fs.readFileSync(settingsPath));
     poolSize = settings.poolSize || poolSize;
-    timezone = settings.timezone || timezone;
   } catch {}
 
   if (pathname === '/markup') {
-    const seed = parseInt(url.searchParams.get('seed')) || Math.floor(Date.now() / (30 * 60 * 1000));
-    const reveal = url.searchParams.get('reveal') === 'true';
-
-    const id = getPokemonId(seed, poolSize);
-
-    // Toggle logic
-    const nextSeed = reveal ? seed + 1 : seed;
-    const nextReveal = !reveal;
-
+    const id = getRandomId(poolSize);
     fetchPokemonData(id, pokemon => {
-      const html = buildMarkup(pokemon, reveal, nextSeed, nextReveal);
+      const html = buildMarkup(pokemon);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
+    });
+  } else if (pathname === '/random') {
+    const id = getRandomId(poolSize);
+    fetchPokemonData(id, pokemon => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(pokemon));
     });
   } else {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
