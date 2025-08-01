@@ -4,12 +4,12 @@
   "version": "1.0.0",
   "description": "Daily silhouette challenge: guess the Pokémon before it is revealed.",
   "author": "Anonymous",
-  "installation_url": "https://YOUR_DOMAIN.example.com/install",
-  "installation_success_webhook_url": "https://YOUR_DOMAIN.example.com/install/success",
-  "plugin_management_url": "https://YOUR_DOMAIN.example.com/manage",
-  "plugin_markup_url": "https://YOUR_DOMAIN.example.com/markup",
-  "uninstallation_webhook_url": "https://YOUR_DOMAIN.example.com/uninstall",
-  "source_code_url": "https://github.com/YOUR_GITHUB_USERNAME/who-is-that-pokemon",
+  "installation_url": "https://who-is-that-pokemon.onrender.com/install",
+  "installation_success_webhook_url": "https://who-is-that-pokemon.onrender.com/install/success",
+  "plugin_management_url": "https://who-is-that-pokemon.onrender.com/manage",
+  "plugin_markup_url": "https://who-is-that-pokemon.onrender.com/markup",
+  "uninstallation_webhook_url": "https://who-is-that-pokemon.onrender.com/uninstall",
+  "source_code_url": "https://github.com/yovop43588/who-is-that-pokemon",
   "icons": {
     "128": "assets/icon-128.png"
   }
