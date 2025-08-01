@@ -1,0 +1,16 @@
+{
+  "name": "Who Is That Pokémon?",
+  "slug": "who-is-that-pokemon",
+  "version": "1.0.0",
+  "description": "Daily silhouette challenge: guess the Pokémon before it is revealed.",
+  "author": "Anonymous",
+  "installation_url": "https://YOUR_DOMAIN.example.com/install",
+  "installation_success_webhook_url": "https://YOUR_DOMAIN.example.com/install/success",
+  "plugin_management_url": "https://YOUR_DOMAIN.example.com/manage",
+  "plugin_markup_url": "https://YOUR_DOMAIN.example.com/markup",
+  "uninstallation_webhook_url": "https://YOUR_DOMAIN.example.com/uninstall",
+  "source_code_url": "https://github.com/YOUR_GITHUB_USERNAME/who-is-that-pokemon",
+  "icons": {
+    "128": "assets/icon-128.png"
+  }
+}

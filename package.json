@@ -1,0 +1,11 @@
+{
+  "name": "who-is-that-pokemon",
+  "version": "1.0.0",
+  "main": "who-is-that-pokemon.js",
+  "scripts": {
+    "start": "node who-is-that-pokemon.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
