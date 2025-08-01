@@ -9,15 +9,14 @@ function nowInTimezone(tz) {
   return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
 }
 
-function getCurrentPokemonIdAndRevealState(poolSize, timezone) {
+function getCurrentPokemonIdAndRevealState(poolSize, timezone, offset = 0) {
   const now = nowInTimezone(timezone);
   const cycleMinutes = 30;
   const msInCycle = cycleMinutes * 60 * 1000;
 
-  const timestamp = Math.floor(now.getTime() / msInCycle);
-  const inRevealPhase = now.getMinutes() % 30 >= 15;
+  const timestamp = Math.floor((now.getTime() + offset) / msInCycle);
+  const inRevealPhase = ((now.getTime() + offset) / 1000 / 60) % 30 >= 15;
 
-  // Use timestamp as seed for pseudo-random selection
   const id = (timestamp * 2654435761 % 2**32) % poolSize + 1;
   return { id, inRevealPhase };
 }
@@ -65,13 +64,14 @@ function buildMarkup(pokemon, showRealImage) {
       <style>
         body { font-family: sans-serif; display: flex; flex-direction: column;
                align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        img { width: 300px; ${imgStyle} }
+        img { width: 300px; ${imgStyle}; cursor: pointer; }
         h1 { font-size: 2em; margin-top: 20px; }
+        button { display: none; }
       </style>
     </head>
     <body>
       ${filterStyles}
-      <img src="${pokemon.imageUrl}" alt="Who's that Pokémon?"/>
+      <img src="${pokemon.imageUrl}" alt="Who's that Pokémon?" onclick="window.location.href='/markup?offset=' + Date.now()" />
       ${showRealImage ? `<h1>${pokemon.name}</h1>` : ''}
     </body>
     </html>`;
@@ -91,7 +91,10 @@ http.createServer((req, res) => {
     timezone = settings.timezone || timezone;
   } catch {}
 
-  const { id, inRevealPhase } = getCurrentPokemonIdAndRevealState(poolSize, timezone);
+  // Optional ?offset=X to force timestamp-based cycle override
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+
+  const { id, inRevealPhase } = getCurrentPokemonIdAndRevealState(poolSize, timezone, offset);
 
   if (pathname === '/markup') {
     fetchPokemonData(id, pokemon => {
