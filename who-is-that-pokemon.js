@@ -9,15 +9,8 @@ function nowInTimezone(tz) {
   return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
 }
 
-function getCurrentCycleParams(poolSize, timezone) {
-  const now = nowInTimezone(timezone);
-  const cycleMinutes = 30;
-  const minutes = now.getMinutes();
-  const inRevealPhase = (minutes % 30) >= 15;
-
-  const timestamp = Math.floor(now.getTime() / (cycleMinutes * 60 * 1000));
-  const id = (timestamp * 2654435761 % 2**32) % poolSize + 1;
-  return { id, inRevealPhase };
+function getPokemonId(seed, poolSize) {
+  return (seed * 2654435761 % 2**32) % poolSize + 1;
 }
 
 function fetchPokemonData(id, cb) {
@@ -39,27 +32,37 @@ function fetchPokemonData(id, cb) {
   });
 }
 
-function buildMarkup(pokemon, showRealImage) {
+function buildMarkup(pokemon, showRealImage, nextSeed, nextRevealState) {
   const imgStyle = showRealImage
     ? ''
     : 'filter: brightness(0) saturate(100%);';
 
-  const toggleUrl = `/markup?force=true&id=${pokemon.id}&reveal=${!showRealImage}`;
+  const toggleUrl = `/markup?seed=${nextSeed}&reveal=${nextRevealState}`;
 
   return `
     <html>
     <head>
       <meta charset="UTF-8">
       <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column;
-               align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        body { font-family: sans-serif; margin: 0; height: 100vh; display: flex;
+               flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .img-container {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          text-align: center;
+        }
         img { width: 300px; ${imgStyle}; cursor: pointer; }
         h1 { font-size: 2em; margin-top: 20px; }
       </style>
     </head>
     <body>
-      <img src="${pokemon.imageUrl}" alt="Who's that Pokémon?" onclick="window.location.href='${toggleUrl}'" />
-      ${showRealImage ? `<h1>${pokemon.name}</h1>` : ''}
+      <div class="img-container">
+        <a href="${toggleUrl}">
+          <img src="${pokemon.imageUrl}" alt="Who's that Pokémon?" />
+        </a>
+        ${showRealImage ? `<h1>${pokemon.name}</h1>` : ''}
+      </div>
     </body>
     </html>`;
 }
@@ -77,17 +80,18 @@ http.createServer((req, res) => {
     timezone = settings.timezone || timezone;
   } catch {}
 
-  const force = url.searchParams.get('force') === 'true';
-  const forcedId = parseInt(url.searchParams.get('id'));
-  const forcedReveal = url.searchParams.get('reveal') === 'true';
-
   if (pathname === '/markup') {
-    const { id, inRevealPhase } = force
-      ? { id: forcedId || 1, inRevealPhase: forcedReveal }
-      : getCurrentCycleParams(poolSize, timezone);
+    const seed = parseInt(url.searchParams.get('seed')) || Math.floor(Date.now() / (30 * 60 * 1000));
+    const reveal = url.searchParams.get('reveal') === 'true';
+
+    const id = getPokemonId(seed, poolSize);
+
+    // Toggle logic
+    const nextSeed = reveal ? seed + 1 : seed;
+    const nextReveal = !reveal;
 
     fetchPokemonData(id, pokemon => {
-      const html = buildMarkup(pokemon, inRevealPhase);
+      const html = buildMarkup(pokemon, reveal, nextSeed, nextReveal);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     });
