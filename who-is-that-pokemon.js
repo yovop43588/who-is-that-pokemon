@@ -80,14 +80,12 @@ async function fetchPokemonData(id, style) {
 
 /**
  * Build the markup for the Pokémon silhouette and reveal.
- * If `snippet` is true, return only the core fragment (styles, markup and script)
- * without the <html>/<head>/<body> wrapper.  TRMNL can poll this fragment.
+ * When snippet is true, return only the core fragment without <html>/<body> wrappers.
+ * Uses CSS animations instead of JavaScript for the reveal.
  */
 function buildMarkup(pokemon, revealTime, snippet = false) {
   const safeImageUrl = pokemon.imageUrl.replace(/&/g, '&amp;');
   const safeName = pokemon.name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  // Core snippet: styles, content and behavior
   const core = `
     <style>
       html, body {
@@ -106,17 +104,35 @@ function buildMarkup(pokemon, revealTime, snippet = false) {
         height: 256px;
       }
       #container img {
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
         object-fit: contain;
       }
-      #shadow { filter: grayscale(100%) brightness(0%) contrast(200%); }
-      #colored { display: none; }
-      #reveal-button {
-        margin-top: 1rem;
-        padding: 0.5rem 1rem;
-        font-size: 1rem;
-        cursor: pointer;
+      /* Fade out the shadow and fade in the colour after revealTime seconds */
+      #shadow {
+        opacity: 1;
+        animation: fadeShadow ${revealTime}s forwards;
+      }
+      #colored {
+        opacity: 0;
+        animation: fadeColor ${revealTime}s forwards;
+      }
+      @keyframes fadeShadow {
+        to { opacity: 0; }
+      }
+      @keyframes fadeColor {
+        to { opacity: 1; }
+      }
+      /* Show caption after reveal */
+      #caption {
+        opacity: 0;
+        animation: showCaption ${revealTime}s forwards;
+      }
+      @keyframes showCaption {
+        to { opacity: 1; }
       }
     </style>
     <h1>Who’s That Pokémon?</h1>
@@ -124,35 +140,12 @@ function buildMarkup(pokemon, revealTime, snippet = false) {
       <img id="shadow" src="${safeImageUrl}" alt="Silhouette">
       <img id="colored" src="${safeImageUrl}" alt="${safeName}">
     </div>
-    <button id="reveal-button">Reveal</button>
-    <script>
-      const revealDelay = ${revealTime * 1000};
-      const shadowImg = document.getElementById('shadow');
-      const coloredImg = document.getElementById('colored');
-      const btn = document.getElementById('reveal-button');
-      function reveal() {
-        shadowImg.style.display = 'none';
-        coloredImg.style.display = 'block';
-        btn.style.display = 'none';
-        const caption = document.createElement('p');
-        caption.textContent = "It’s ${safeName}!";
-        caption.style.marginTop = '0.5rem';
-        caption.style.fontWeight = 'bold';
-        caption.style.fontSize = '1.2rem';
-        document.body.appendChild(caption);
-      }
-      btn.addEventListener('click', reveal);
-      setTimeout(reveal, revealDelay);
-    </script>
+    <p id="caption" style="margin-top:0.5rem;font-weight:bold;font-size:1.2rem;">It’s ${safeName}!</p>
   `;
-  // Trim whitespace
   const trimmed = core.trim();
-  // If snippet requested, return just the core
   if (snippet) return trimmed;
-  // Otherwise wrap in a complete HTML document
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Who’s That Pokémon?</title></head><body>${trimmed}</body></html>`;
 }
-
 // Parse form data from x-www-form-urlencoded POST bodies
 function parseFormBody(body) {
   const out = {};
