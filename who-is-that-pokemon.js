@@ -79,13 +79,19 @@ async function fetchPokemonData(id, style) {
 }
 
 /**
- * Build the markup for the Pokémon silhouette and reveal.
- * When snippet is true, return only the core fragment without <html>/<body> wrappers.
- * Uses CSS animations instead of JavaScript for the reveal.
+ * Build the markup for the Pokémon screen.
+ * Shows the silhouette for the first half of the cycle and the coloured
+ * image plus caption for the second half.  When `snippet` is true, returns
+ * only the inner fragment without the <html>/<body> wrapper.
  */
-function buildMarkup(pokemon, revealTime, snippet = false) {
+function buildMarkup(pokemon, reveal, snippet = false) {
   const safeImageUrl = pokemon.imageUrl.replace(/&/g, '&amp;');
   const safeName = pokemon.name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const shadowStyle = reveal ? 'display:none;' : '';
+  const coloredStyle = reveal ? '' : 'display:none;';
+  const caption = reveal
+    ? `<p style="margin-top:0.5rem;font-weight:bold;font-size:1.2rem;">It’s ${safeName}!</p>`
+    : '';
   const core = `
     <style>
       html, body {
@@ -104,61 +110,30 @@ function buildMarkup(pokemon, revealTime, snippet = false) {
         height: 256px;
       }
       #container img {
-        position: absolute;
-        top: 0;
-        left: 0;
         width: 100%;
         height: 100%;
         object-fit: contain;
       }
-      /* Fade out the shadow and fade in the colour after revealTime seconds */
-      #shadow {
-        opacity: 1;
-        animation: fadeShadow ${revealTime}s forwards;
-      }
-      #colored {
-        opacity: 0;
-        animation: fadeColor ${revealTime}s forwards;
-      }
-      @keyframes fadeShadow {
-        to { opacity: 0; }
-      }
-      @keyframes fadeColor {
-        to { opacity: 1; }
-      }
-      /* Show caption after reveal */
-      #caption {
-        opacity: 0;
-        animation: showCaption ${revealTime}s forwards;
-      }
-      @keyframes showCaption {
-        to { opacity: 1; }
-      }
     </style>
     <h1>Who’s That Pokémon?</h1>
     <div id="container">
-      <img id="shadow" src="${safeImageUrl}" alt="Silhouette">
-      <img id="colored" src="${safeImageUrl}" alt="${safeName}">
+      <img id="shadow" src="${safeImageUrl}" alt="Silhouette" style="${shadowStyle}">
+      <img id="colored" src="${safeImageUrl}" alt="${safeName}" style="${coloredStyle}">
     </div>
-    <p id="caption" style="margin-top:0.5rem;font-weight:bold;font-size:1.2rem;">It’s ${safeName}!</p>
+    ${caption}
   `;
   const trimmed = core.trim();
   if (snippet) return trimmed;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Who’s That Pokémon?</title></head><body>${trimmed}</body></html>`;
-}
-// Parse form data from x-www-form-urlencoded POST bodies
-function parseFormBody(body) {
-  const out = {};
-  body.split('&').forEach((pair) => {
-    const [k, v] = pair.split('=');
-    const key = decodeURIComponent(k.replace(/\+/g, ' '));
-    const val = decodeURIComponent((v || '').replace(/\+/g, ' '));
-    out[key] = val;
-  });
-  return out;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Who’s That Pokémon?</title></head><body>${trimmed}</body></html>`;
 }
 
-// Persist configuration to a JSON file so that settings survive restarts.
+// Cycle configuration.  Each cycle is 10 minutes: 5 minutes for the silhouette
+// and 5 minutes for the coloured artwork.  After each cycle a new Pokémon is
+// selected.  Values are in milliseconds.
+const REVEAL_DURATION_MS = 5 * 60 * 1000;
+const CYCLE_DURATION_MS = REVEAL_DURATION_MS * 2;
+
+// Configuration persistence (unchanged)
 const SETTINGS_FILE = path.join(__dirname, 'runtime_settings.json');
 let runtimeConfig = {};
 function loadRuntimeConfig() {
@@ -175,7 +150,6 @@ function saveRuntimeConfig() {
 }
 loadRuntimeConfig();
 
-// Read current configuration (defaults + overrides)
 function currentConfig() {
   return {
     revealTime: runtimeConfig.revealTime != null ? runtimeConfig.revealTime : DEFAULT_CONFIG.revealTime,
@@ -185,7 +159,7 @@ function currentConfig() {
   };
 }
 
-// Create HTTP server and handle routes
+// HTTP server
 const server = http.createServer(async (req, res) => {
   const { pathname, query } = url.parse(req.url, true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -198,30 +172,28 @@ const server = http.createServer(async (req, res) => {
   }
   const cfg = currentConfig();
   try {
-    // Root: shows links to markup and manage
     if (pathname === '/' && req.method === 'GET') {
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Who’s That Pokémon?</title></head><body><h1>Who’s That Pokémon?</h1><p>This server is running. Visit <a href="/markup">/markup</a> to see today’s Pokémon. Manage settings at <a href="/manage">/manage</a>.</p></body></html>`;
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Who’s That Pokémon?</title></head><body><h1>Who’s That Pokémon?</h1><p>This server is running. Visit <a href="/markup">/markup</a> to see the current Pokémon. Manage settings at <a href="/manage">/manage</a>.</p></body></html>`;
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
       return;
     }
-    // Markup endpoint: serve the Pokémon screen
+    // Generate dynamic markup based on the 10-minute cycle
     if (pathname === '/markup' && req.method === 'GET') {
-      const now = nowInTimezone(cfg.timezone);
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const d = String(now.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
-      const id = getPokemonIdForDate(dateStr, cfg.poolSize);
+      const nowMs = Date.now();
+      const cycleNumber = Math.floor(nowMs / CYCLE_DURATION_MS);
+      const withinCycle = nowMs % CYCLE_DURATION_MS;
+      const reveal = withinCycle >= REVEAL_DURATION_MS;
+      // Use the cycle number as a seed to deterministically pick a Pokémon ID
+      const id = getPokemonIdForDate(String(cycleNumber), cfg.poolSize);
       const pokemon = await fetchPokemonData(id, cfg.imageStyle);
-      // Determine if only a snippet was requested (for TRMNL)
       const snippetFlag = Object.prototype.hasOwnProperty.call(query, 'snippet');
-      const html = buildMarkup(pokemon, cfg.revealTime, snippetFlag);
+      const html = buildMarkup(pokemon, reveal, snippetFlag);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
       return;
     }
-    // GET /manage: show simple form to update settings
+    // Management and webhook endpoints remain unchanged...
     if (pathname === '/manage' && req.method === 'GET') {
       const escape = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const msg = query.msg ? `<div style="color: green;">${escape(query.msg)}</div>` : '';
@@ -230,12 +202,17 @@ const server = http.createServer(async (req, res) => {
       res.end(page);
       return;
     }
-    // POST /manage: update settings
     if (pathname === '/manage' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk) => { body += chunk.toString(); });
       req.on('end', () => {
-        const form = parseFormBody(body);
+        const form = body.split('&').reduce((acc, pair) => {
+          const [k, v] = pair.split('=');
+          const key = decodeURIComponent(k.replace(/\+/g, ' '));
+          const val = decodeURIComponent((v || '').replace(/\+/g, ' '));
+          acc[key] = val;
+          return acc;
+        }, {});
         if (form.revealTime) {
           const v = parseFloat(form.revealTime);
           if (!isNaN(v) && v > 0) runtimeConfig.revealTime = v;
@@ -252,7 +229,6 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-    // Installation endpoint (GET): redirect to callback if provided
     if (pathname === '/install' && req.method === 'GET') {
       const callback = query.installation_callback_url;
       if (callback) {
@@ -264,21 +240,19 @@ const server = http.createServer(async (req, res) => {
       }
       return;
     }
-    // Installation success webhook
     if (pathname === '/install/success' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk) => { body += chunk.toString(); });
       req.on('end', () => { console.log('Install success:', body); res.writeHead(204); res.end(); });
       return;
     }
-    // Uninstallation webhook
     if (pathname === '/uninstall' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk) => { body += chunk.toString(); });
       req.on('end', () => { console.log('Uninstall:', body); res.writeHead(204); res.end(); });
       return;
     }
-    // Any other route: 404
+    // Not found
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
   } catch (err) {
@@ -288,7 +262,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Start the server on PORT (default 3000 or process.env.PORT)
+// Start the server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Who’s That Pokémon? server running on http://localhost:${PORT}`);
